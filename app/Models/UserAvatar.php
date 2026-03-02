@@ -28,8 +28,8 @@ class UserAvatar extends Model
         $avatar = static::where('uid', $uid)->first();
 
         if (!$avatar || empty($avatar->value)) {
-            self::$avatarCache[$uid] = false;
-            return false;
+            self::$avatarCache[$uid] = null;
+            return null;
         }
 
         $data = @unserialize($avatar->value);
