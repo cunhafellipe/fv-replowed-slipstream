@@ -1581,7 +1581,7 @@ $baseUrl = $scheme . '://' . $_SERVER['HTTP_HOST'];
                             "master_assethash_url": "<?= $baseUrl ?>/farmville/assethash/v9/",
                             "masterysigns_amf_url": "<?= $baseUrl ?>/farmville/masterysigns/v1/",
                             "ITEMS_AMF_BUILD_TIME_REDUCTION": false,
-                            "swfLocation": "<?= $baseUrl ?>/farmville/embeds/Flash/v855037.855026/FarmGame.855037.855026.swf",
+                            "swfLocation": "<?= $baseUrl ?>/farmville/embeds/Flash/v855037.855026/FarmGame-10.swf",
                             "parts_count": 3,
                             "NO_FUEL_DAY_START_TIME": "1606723200",
                             "NO_FUEL_DAY_END_TIME": "1607328000",
