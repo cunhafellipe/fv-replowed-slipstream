@@ -11,8 +11,8 @@ BASILISK_DIR=/opt/basilisk
 # variables containing resource links with no filename
 FLASH_LINK_BASE=https://github.com/darktohka/clean-flash-builds/releases/download/v1.7
 BASILISK_LINK_BASE=https://dl.basilisk-browser.org
-ASSET_LINK_BASE=https://farmville.guildedsin.com/all-any/assets
-SUPPLEMENTS_LINK_BASE=https://farmville.guildedsin.com/all-any/supplements
+ASSET_LINK_BASE=https://mirror.farmplay.win
+SUPPLEMENTS_LINK_BASE=https://mirror.farmplay.win
 DEHASHER_LINK_BASE=https://github.com/PuccamiteTech/FVDehasher/releases/download/1.02-SNAPSHOT
 
 # variables containing filenames used with resource links
