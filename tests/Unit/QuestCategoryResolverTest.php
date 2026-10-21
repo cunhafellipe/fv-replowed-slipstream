@@ -7,6 +7,15 @@ use PHPUnit\Framework\TestCase;
 
 final class QuestCategoryResolverTest extends TestCase
 {
+    public function test_it_identifies_market_world_animal_and_tree_families(): void
+    {
+        self::assertContains('AllFarmfestAnimals', QuestCategoryResolver::categories('rooster_xfs_icecream', ['type' => 'animal']));
+        self::assertContains('AllFarmfestTrees', QuestCategoryResolver::categories('xfs_farmlandtree', ['type' => 'tree']));
+        self::assertContains('AllAlohaAnimals', QuestCategoryResolver::categories('goat_xah_hawaiishirt', ['type' => 'animal']));
+        self::assertContains('AllAlohaTrees', QuestCategoryResolver::categories('xah_bilimbitree', ['type' => 'tree']));
+        self::assertNotContains('AllFarmfestAnimals', QuestCategoryResolver::categories('xfs_purpleartichoke', ['type' => 'seed']));
+    }
+
     public function test_it_maps_verified_legacy_quest_categories(): void
     {
         self::assertContains('Peanut', QuestCategoryResolver::categories('peanuts', ['subtype' => 'misc']));

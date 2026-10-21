@@ -85,6 +85,23 @@ function trackQuestProgress($uid, $action, $type, $amount = 1, $extraData = []) 
         ));
     }
 
+    // These events are emitted only after an accepted world/crafting action.
+    // The market board can observe the same server event without trusting a
+    // client-saved task counter or modifying ordinary quest progress.
+    if (\App\Support\MarketCompetition::enabledFeatures() !== []) {
+        try {
+            \App\Support\MarketInnovationState::recordProgress(
+                (string) $uid,
+                (string) $action,
+                (string) $type,
+                (int) $amount,
+                is_array($extraData) ? $extraData : [],
+            );
+        } catch (\Throwable $e) {
+            Logger::error('MarketInnovation', 'Could not record accepted task event: '.$e->getMessage());
+        }
+    }
+
     return $updatedQuests;
 }
 

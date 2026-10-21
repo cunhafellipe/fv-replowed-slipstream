@@ -14,6 +14,7 @@ use App\Models\Item;
 use App\Models\WorldActionReceipt;
 use App\Models\WorldObject;
 use App\Support\GarageEquipmentCatalog;
+use App\Support\SuperCrops;
 use App\Support\WorldCurrencyService;
 use Illuminate\Support\Facades\DB;
 
@@ -329,6 +330,11 @@ class EquipmentWorldService
         $equipmentBundle = $request->params[1] ?? null;
         $plotBundle = $request->params[2] ?? null;
         $itemName = $request->params[3] ?? null;
+
+        if (in_array($action, [ACTION_PLANT, ACTION_COMBINE], true)
+            && is_string($itemName) && !SuperCrops::canPlant($playerObj->getUid(), $itemName)) {
+            return ['data' => ['success' => false, 'error' => 'Super Crop is not unlocked']];
+        }
 
         if (!$action || !$plotBundle) {
             $data["data"] = [];

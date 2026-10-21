@@ -5,8 +5,20 @@ require_once AMFPHP_ROOTPATH . "Helpers/general_functions.php";
 
 use App\Models\WorldObject;
 use App\Support\StorageConfig;
+use App\Support\SuperCrops;
 
 class FBRequestService{
+    public static function sendFriendSetRequest($playerObj, $request, $market = null): array
+    {
+        $params = is_array($request->params ?? null) ? $request->params : [];
+        if (($params[1] ?? null) !== 'SuperCrops' || ($params[2] ?? null) !== 'FS07'
+            || !is_string($params[0] ?? null) || !is_array($params[4] ?? null)) {
+            return ['data' => ['error' => 'invalidRequest']];
+        }
+
+        return ['data' => SuperCrops::request($playerObj->getUid(), $params[0], $params[4])];
+    }
+
     public static function sendInviteRequest($playerObj, $request){
         foreach($request->params[0] as $uid){
             $playerObj->setPendingNeighbors($uid);

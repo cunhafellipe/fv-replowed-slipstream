@@ -982,7 +982,7 @@ class Player {
                     'adoptedAnimals' => 0,
                     // The Flash client calls indexOf() while populating market
                     // locks, so an absent super-crop list must be an array.
-                    'superCropsStatus' => array(),
+                    'superCropsStatus' => \App\Support\SuperCrops::unlockedCodes($this->getUid()),
                     'lotteryTickets' => 0,
                     'lonelyAnimalCode' => "2dvd",
                     'motdSeenFlags' => 0,
@@ -1049,11 +1049,27 @@ class Player {
             $turboRingActiveWorlds[$currentWorldType] = true;
         }
 
+        $marketFeatureOptions = [];
+        foreach (\App\Support\MarketCompetition::enabledFeatures() as $feature) {
+            $marketState = \App\Support\MarketInnovationState::load(
+                (string) $this->uid,
+                $feature,
+            );
+            if ($feature === \App\Support\MarketCompetition::FARMERS
+                && $marketState['saved_active_tasks'] !== []
+                && (int) $marketState['task_catalog_revision'] < 1) {
+                $marketState = \App\Support\MarketInnovationState::startNewDay((string) $this->uid, $feature);
+            }
+            $marketFeatureOptions[$feature] = $marketState;
+        }
+
         return [
             // MarketStallBuilding keeps its expansion state in the crafting
             // feature options on Flash. Rebuild that state from the durable
             // world object so a reload cannot reset an expanded stall.
             "craftingmarketstall" => getMarketStallFeatureOptions($this->uid, $currentWorldType),
+            // Both order boards share an account across worlds and sessions.
+            ...$marketFeatureOptions,
             "world_seasons" => [
                 "farm" => 0,
                 "avalon" => 1

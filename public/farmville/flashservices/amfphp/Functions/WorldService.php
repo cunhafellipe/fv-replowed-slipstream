@@ -675,6 +675,15 @@ class WorldService
         $data = array("id" => 0, "data" => array("id" => 0));
         $action = $request->params[0];
 
+        // Reject locked Super Crops before removing energy or changing a plot.
+        if ($action === ACTION_PLANT) {
+            $itemName = $request->params[1]->itemName ?? null;
+            if (is_string($itemName) && !SuperCrops::canPlant($playerObj->getUid(), $itemName)) {
+                return ['id' => 0, 'data' => ['id' => 0, 'success' => false,
+                    'error' => 'Super Crop is not unlocked']];
+            }
+        }
+
         $extraParams = (isset($request->params[2]) && is_array($request->params[2]) && isset($request->params[2][0]))
             ? $request->params[2][0] : null;
 
