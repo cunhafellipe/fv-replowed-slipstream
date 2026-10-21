@@ -9,6 +9,12 @@ class Item extends Model
 {
     protected $table = 'items';
 
+    /** @var array<string, mixed> */
+    private static array $nameCache = [];
+
+    /** @var array<string, mixed> */
+    private static array $codeCache = [];
+
     // The imported legacy catalog has no created_at/updated_at columns.
     public $timestamps = false;
 
@@ -32,10 +38,8 @@ class Item extends Model
             return false;
         }
 
-        static $nameCache = [];
-
-        if (array_key_exists($name, $nameCache)) {
-            return $nameCache[$name];
+        if (array_key_exists($name, self::$nameCache)) {
+            return self::$nameCache[$name];
         }
 
         $cacheKey = "item:name:{$name}";
@@ -47,7 +51,7 @@ class Item extends Model
             return $item->itemData;
         });
 
-        $nameCache[$name] = $data;
+        self::$nameCache[$name] = $data;
         return $data;
     }
 
@@ -57,10 +61,8 @@ class Item extends Model
             return false;
         }
 
-        static $codeCache = [];
-
-        if (array_key_exists($code, $codeCache)) {
-            return $codeCache[$code];
+        if (array_key_exists($code, self::$codeCache)) {
+            return self::$codeCache[$code];
         }
 
         $cacheKey = "item:code:{$code}";
@@ -75,12 +77,14 @@ class Item extends Model
             return $item->itemData;
         });
 
-        $codeCache[$code] = $data;
+        self::$codeCache[$code] = $data;
         return $data;
     }
 
     public static function clearCache(): void
     {
+        self::$nameCache = [];
+        self::$codeCache = [];
         Cache::flush();
     }
 

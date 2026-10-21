@@ -39,10 +39,10 @@ it('serves Farmers Market but omits Tropical Market when Tropical is disabled', 
 
     $response = $this->get('/farmville/market-cms-v2/'.MarketSeason::cacheKey().'.xml.gz');
     $response->assertOk();
-    $cms = gzuncompress($response->getContent());
+    $cms = simplexml_load_string(gzuncompress($response->getContent()), 'SimpleXMLElement', LIBXML_NONET);
 
-    expect($cms)->toContain('FarmersMarket2020Innovation')
-        ->and($cms)->not->toContain('TropicalMarketInnovation');
+    expect($cms->xpath("//featureConfig/feature[@name='FarmersMarket2020Innovation']"))->toHaveCount(1)
+        ->and($cms->xpath("//featureConfig/feature[@name='TropicalMarketInnovation']"))->toHaveCount(0);
 });
 
 it('serves a client task catalog with reachable home-farm crops', function (): void {

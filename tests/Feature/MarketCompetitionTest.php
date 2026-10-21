@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 
 beforeEach(function (): void {
     config()->set('market_innovations.enabled', true);
+    Item::clearCache();
     if (! defined('AMFPHP_ROOTPATH')) {
         define('AMFPHP_ROOTPATH', dirname(__DIR__, 2).'/public/farmville/flashservices/amfphp/');
     }
