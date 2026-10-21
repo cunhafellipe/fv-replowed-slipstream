@@ -327,7 +327,8 @@ it('applies the hand-authored Jade Falls river to negative scene coordinates', f
         ->and($expansion['-42,-8'])->toBe('T')
         ->and($expansion['-48,-14'])->toBe('T')
         ->and($expansion['-34,0'])->toBe('T')
-        ->and($expansion['-24,10'])->toBe('T')
+        // The completed southwest ridge trace leaves this far-side cell land.
+        ->and($expansion['-24,10'])->toBe('L')
         ->and($expansion['-10,24'])->toBe('T')
         ->and($expansion['-48,4'])->toBe('T')
         ->and($expansion['-44,8'])->toBe('T')

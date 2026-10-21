@@ -268,7 +268,9 @@ it('reports pet cooldown separately from a missing treat and consumes only succe
         ->and($duplicate['data']['errorCode'])->toBe('pet_already_fed_today')
         ->and($missing['data']['success'])->toBeFalse()
         ->and($missing['data']['errorCode'])->toBe('pet_not_found')
-        ->and($pet->fresh()->toFlashObject()->kibbleFedCount)->toBe(1)
+        // The first adult treat advances level 1 to 2 and resets its count.
+        ->and($pet->fresh()->toFlashObject()->petLevel)->toBe(2)
+        ->and($pet->fresh()->toFlashObject()->kibbleFedCount)->toBe(0)
         ->and($pet->fresh()->toFlashObject()->petName)->toBe('Rusty');
     $giftbox = unserialize(PlayerMeta::getValue($world->uid, 'giftbox'), ['allowed_classes' => false]);
     expect($giftbox['0z'][0])->toBe(1);
