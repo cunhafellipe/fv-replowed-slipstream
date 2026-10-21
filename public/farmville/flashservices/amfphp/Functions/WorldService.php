@@ -2035,8 +2035,9 @@ class WorldService
                 );
                 if (empty($useResult['success'])) {
                     Logger::log(self::LOG, sprintf(
-                        'Consumable use rejected: uid=%s, reason=%s',
+                        'Consumable use rejected: uid=%s, code=%s, reason=%s',
                         $playerObj->getUid(),
+                        $useResult['errorCode'] ?? 'unspecified',
                         $useResult['error'] ?? 'unavailable',
                     ));
                 }

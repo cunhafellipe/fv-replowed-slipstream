@@ -69,13 +69,19 @@ final class PetState
     /** Return a new state only when the original client would allow a daily feed. */
     public static function feed($components, ?string $itemName, int $plantTime, int $nowMs, string $foodItem): ?\stdClass
     {
+        return self::feedResult($components, $itemName, $plantTime, $nowMs, $foodItem)['state'];
+    }
+
+    /** Return the updated pet state, or a stable reason why feeding was rejected. */
+    public static function feedResult($components, ?string $itemName, int $plantTime, int $nowMs, string $foodItem): array
+    {
         if ($plantTime <= 0 || $nowMs < $plantTime) {
-            return null;
+            return ['state' => null, 'reason' => 'pet_not_feedable'];
         }
 
         $state = self::forFlash($components, $itemName, $plantTime);
         if ($state->isRunAway || (int) $state->petLevel >= 5) {
-            return null;
+            return ['state' => null, 'reason' => 'pet_not_feedable'];
         }
 
         $daysSincePurchase = intdiv($nowMs - $plantTime, self::DAY_MS);
@@ -89,7 +95,7 @@ final class PetState
         }
 
         if ($foodItem !== ($adult ? 'consume_treat' : 'consume_kibble')) {
-            return null;
+            return ['state' => null, 'reason' => 'pet_food_mismatch'];
         }
 
         $dayStart = $adult && (int) $state->levelStartTime > 0
@@ -97,7 +103,16 @@ final class PetState
         $daysSinceStart = intdiv($nowMs - $dayStart, self::DAY_MS);
         $todayBeganAt = $dayStart + $daysSinceStart * self::DAY_MS;
         if ((int) $state->lastFedTime >= $todayBeganAt) {
-            return null;
+            // Placement initializes lastFedTime even though no food was used.
+            // The original client waits a full purchase-relative day before
+            // the first feed, so this is not an "already fed" case.
+            if ((int) $state->kibbleFedCount === 0
+                && (int) $state->lastFedTime === $plantTime
+                && $nowMs < $plantTime + self::DAY_MS) {
+                return ['state' => null, 'reason' => 'pet_first_feed_not_ready'];
+            }
+
+            return ['state' => null, 'reason' => 'pet_already_fed_today'];
         }
 
         $state->lastFedTime = $nowMs;
@@ -117,7 +132,7 @@ final class PetState
             }
         }
 
-        return $state;
+        return ['state' => $state, 'reason' => null];
     }
 
     /** Accept the client's adulthood event only after the original age/feed gate. */

@@ -68,7 +68,14 @@ final class ConsumableActionHandler
         $isPetFood = is_array($item)
             && ($item['className'] ?? null) === 'CPetsKibble'
             && in_array($item['name'] ?? null, ['consume_kibble', 'consume_treat'], true);
-        $petTargetId = (int) self::flashValue($extraParams, 'targetPetId', 0);
+        // The pet's context-menu transaction predates the durable pet-feed
+        // request and sends targetObjectId. Accept that legacy field as an
+        // alias while newer CPetsKibble clients send targetPetId.
+        $petTargetId = (int) self::flashValue(
+            $extraParams,
+            'targetPetId',
+            self::flashValue($extraParams, 'targetObjectId', 0),
+        );
         $petWorldType = $isPetFood ? \getCurrentWorldType($uid) : null;
         $petWorldId = $isPetFood ? \getWorldId($uid, $petWorldType) : null;
         if ($isPetFood && (!$isOwnWorldUse || !$storageIsPersisted || $isFree
@@ -141,19 +148,26 @@ final class ConsumableActionHandler
                         ->where('deleted', false)
                         ->lockForUpdate()
                         ->first();
-                    $newPetState = $pet === null ? null : PetState::feed(
+                    if ($pet === null) {
+                        return ['failure' => 'pet_not_found'];
+                    }
+                    $feedResult = PetState::feedResult(
                         $pet->components,
                         $pet->item_name,
                         (int) $pet->plant_time,
                         (int) \getCurrentTimeMs(),
                         (string) ($item['name'] ?? ''),
                     );
+                    $newPetState = $feedResult['state'];
                     if ($newPetState === null) {
-                        return false;
+                        return ['failure' => $feedResult['reason'] ?? 'pet_not_feedable'];
                     }
                 }
-                if (!$userMeta || !\consumeStoredItem($uid, $itemCode, $itemCount, $storageId)) {
-                    return false;
+                if (!$userMeta) {
+                    return ['failure' => 'player_storage_unavailable'];
+                }
+                if (!\consumeStoredItem($uid, $itemCode, $itemCount, $storageId)) {
+                    return ['failure' => 'consumable_unavailable'];
                 }
 
                 if ($pet !== null) {
@@ -207,11 +221,14 @@ final class ConsumableActionHandler
                 PlayerMeta::clearCache($uid, 'inventory_storage');
             }
             \UserResources::invalidateCache($uid);
-            $transactionResult = false;
+            $transactionResult = ['failure' => 'use_failed'];
         }
 
+        if (is_array($transactionResult) && isset($transactionResult['failure'])) {
+            return self::failureResponse($transactionResult['failure']);
+        }
         if ($transactionResult === false) {
-            return ['success' => false, 'consumed' => 0, 'error' => 'Consumable is no longer available.'];
+            return self::failureResponse('use_failed');
         }
 
         if ($isPetFood) {
@@ -222,6 +239,28 @@ final class ConsumableActionHandler
             ['success' => true],
             $transactionResult,
         );
+    }
+
+    /** Map internal rejection reasons to clear, stable AMF response fields. */
+    private static function failureResponse(string $reason): array
+    {
+        [$errorCode, $message] = match ($reason) {
+            'pet_first_feed_not_ready' => ['pet_first_feed_not_ready', 'This pet is not hungry yet. Its first feeding is available 24 hours after placement.'],
+            'pet_already_fed_today' => ['pet_already_fed_today', 'This pet has already been fed today.'],
+            'pet_food_mismatch' => ['pet_food_mismatch', 'This pet cannot use that food.'],
+            'pet_not_found' => ['pet_not_found', 'This pet is no longer available.'],
+            'pet_not_feedable' => ['pet_not_feedable', 'This pet cannot be fed right now.'],
+            'consumable_unavailable' => ['consumable_unavailable', 'Consumable is no longer available in storage.'],
+            'player_storage_unavailable' => ['player_storage_unavailable', 'Player storage is unavailable.'],
+            default => ['use_failed', 'Could not complete this consumable action.'],
+        };
+
+        return [
+            'success' => false,
+            'consumed' => 0,
+            'errorCode' => $errorCode,
+            'error' => $message,
+        ];
     }
 
     /** Read a named value from an AMF object or associative array. */
