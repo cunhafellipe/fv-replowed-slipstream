@@ -371,6 +371,36 @@ class EquipmentWorldService
         $worldId = $world['worldId'] ?? getWorldId($uid, $currentWorldType);
 
         $positionIndex = buildPositionIndex($world["objectsArray"]);
+        if ($action === ACTION_PLOW) {
+            // Preflight the WHOLE sweep before changing any objects/resources.
+            // TEquipmentAction ignores null per-plot results; silently skipping
+            // one square would leave an optimistic phantom plot in Flash.
+            foreach ($plotBundle as $plotData) {
+                $plotObj = self::createPlotObject($plotData);
+                $posX = $plotObj->position->x ?? null;
+                $posY = $plotObj->position->y ?? null;
+                $foundKey = is_numeric($posX) && is_numeric($posY)
+                    ? findByPosition($positionIndex, $posX, $posY) : null;
+                if ($foundKey !== null) {
+                    continue; // Replows/replays preserve existing saved plots.
+                }
+                $terrainError = getNewPlotTerrainError($world, $posX, $posY);
+                if ($terrainError !== null) {
+                    Logger::warning('PlowAudit', 'Equipment plow rejected for terrain', [
+                        'uid' => (string) $uid,
+                        'world_type' => $currentWorldType,
+                        'x' => $posX,
+                        'y' => $posY,
+                        'reason' => $terrainError,
+                    ]);
+                    return [
+                        'errorType' => 1,
+                        'errorData' => 'Cannot plow here: the entire plot must be on plowable terrain. Reload the farm to resync.',
+                        'data' => array_fill(0, $plotCount, null),
+                    ];
+                }
+            }
+        }
         $objectIdIndex = [];
         $positionCounts = [];
         foreach ($world["objectsArray"] as $objectKey => $object) {

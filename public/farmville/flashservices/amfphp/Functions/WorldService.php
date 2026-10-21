@@ -693,7 +693,8 @@ class WorldService
         }
 
         $energyRemoved = false;
-        if ($energyCost > 0) {
+        // New plows must pass terrain validation before spending any energy.
+        if ($energyCost > 0 && $action !== ACTION_PLOW) {
             $uid = $playerObj->getUid();
             $energyRemoved = UserResources::removeEnergy($uid, $energyCost);
         }
@@ -1416,6 +1417,28 @@ class WorldService
                 $existingClassName = (string) ($existingPlot->className ?? '');
                 $existingIsPlot = $existingPlot !== null
                     && stripos($existingClassName, 'Plot') !== false;
+
+                if (!$existingIsPlot && ($terrainError = getNewPlotTerrainError($world, $posX, $posY)) !== null) {
+                    Logger::warning('PlowAudit', 'Single plow rejected for terrain', [
+                        'uid' => (string) $uid,
+                        'world_type' => $currentWorldType,
+                        'x' => $posX,
+                        'y' => $posY,
+                        'reason' => $terrainError,
+                    ]);
+                    // A success:false payload alone is ignored by TPlow.
+                    // Use the AMF error envelope so optimistic local changes
+                    // cannot masquerade as an accepted server transaction.
+                    return [
+                        'errorType' => 1,
+                        'errorData' => 'Cannot plow here: the entire plot must be on plowable terrain. Reload the farm to resync.',
+                        'data' => ['id' => 0, 'success' => false, 'reason' => $terrainError],
+                    ];
+                }
+
+                if ($energyCost > 0) {
+                    $energyRemoved = UserResources::removeEnergy($uid, $energyCost);
+                }
 
                 if ($existingIsPlot) {
                     $existingState = getEffectivePlotState(
