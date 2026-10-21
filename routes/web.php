@@ -231,10 +231,14 @@ Route::middleware(['auth', 'discord.member'])->group(function () {
     Route::post('/api/world-shop/travel', [WorldShopController::class, 'travel'])->name('world-shop.travel');
 
     // Chat routes
-    Route::get('/chat/messages', [ChatController::class, 'messages'])->name('chat.messages');
-    Route::post('/chat/send', [ChatController::class, 'send'])->name('chat.send');
-    Route::get('/chat/unread-count', [ChatController::class, 'unreadCount'])->name('chat.unread-count');
-    Route::post('/chat/mark-read', [ChatController::class, 'markRead'])->name('chat.mark-read');
+    Route::get('/chat/messages', [ChatController::class, 'messages'])
+        ->middleware('throttle:chat-history')->name('chat.messages');
+    Route::post('/chat/send', [ChatController::class, 'send'])
+        ->middleware('throttle:chat-send')->name('chat.send');
+    Route::get('/chat/unread-count', [ChatController::class, 'unreadCount'])
+        ->middleware('throttle:chat-unread')->name('chat.unread-count');
+    Route::post('/chat/mark-read', [ChatController::class, 'markRead'])
+        ->middleware('throttle:chat-mark-read')->name('chat.mark-read');
 });
 
 require __DIR__.'/auth.php';

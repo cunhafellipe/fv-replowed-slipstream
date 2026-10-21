@@ -1,4 +1,37 @@
 <?php
+require_once __DIR__.'/Helpers/request_body.php';
+
+// Read the actual bytes before Laravel or the AMF parser allocates work for
+// this request. Content-Length is only an early hint; chunked/absent lengths
+// must still be bounded by the bytes read from php://input.
+try {
+    $bodyStream = fopen('php://input', 'rb');
+    if ($bodyStream === false) {
+        throw new RuntimeException('Could not open AMF request body.');
+    }
+    try {
+        $rawPostData = amfReadBoundedRequestBody(
+            $bodyStream,
+            amfConfiguredBodyLimit(),
+            isset($_SERVER['CONTENT_LENGTH']) ? (string) $_SERVER['CONTENT_LENGTH'] : null
+        );
+    } finally {
+        fclose($bodyStream);
+    }
+} catch (LengthException) {
+    http_response_code(413);
+    header('Content-Type: text/plain; charset=UTF-8');
+    header('Cache-Control: no-store');
+    echo 'AMF request body is too large.';
+    exit;
+} catch (RuntimeException) {
+    http_response_code(400);
+    header('Content-Type: text/plain; charset=UTF-8');
+    header('Cache-Control: no-store');
+    echo 'Could not read AMF request body.';
+    exit;
+}
+
 // Timing: capture request arrival time
 $_SERVER['REQUEST_TIME_FLOAT'] = $_SERVER['REQUEST_TIME_FLOAT'] ?? microtime(true);
 $GLOBALS['_amf_start'] = microtime(true);
@@ -76,7 +109,7 @@ register_shutdown_function(function () {
  * @package Amfphp
  * @author Ariel Sommeria-klein
  */
-$gateway = Amfphp_Core_HttpRequestGatewayFactory::createGateway();
+$gateway = Amfphp_Core_HttpRequestGatewayFactory::createGateway(null, $rawPostData);
 
 //use this to change the current folder to the services folder. Be careful of the case.
 //This was done in 1.9 and can be used to support relative includes, and should be used when upgrading from 1.9 to 2.0 if you use relative includes
