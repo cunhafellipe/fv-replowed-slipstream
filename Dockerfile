@@ -1,4 +1,5 @@
-FROM php:8.4-apache
+# PHP 8.4.27 fixes PHP2Shell (CVE-2026-109618 and CVE-2026-109619).
+FROM php:8.4.27-apache
 
 # Laravel's MySQL driver, archive support, and the libraries required to
 # compile their corresponding PHP extensions.
