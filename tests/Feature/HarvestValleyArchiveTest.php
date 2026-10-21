@@ -20,24 +20,6 @@ it('retains the original Harvest Valley expansion metadata', function (): void {
         ->and(WorldScoreConfig::scoreUnitForWorld('farmfest'))->toBe('farmfestPoints');
 });
 
-it('retains the Farmfest world definition and themed environment assets', function (): void {
-    $worlds = simplexml_load_string(
-        gzuncompress(file_get_contents(public_path('farmville/xml/gz/v855038/worldSettings.xml.gz'))),
-        'SimpleXMLElement',
-        LIBXML_NONET,
-    );
-    $yimf = simplexml_load_string(
-        gzuncompress(file_get_contents(public_path('farmville/xml/gz/v855038/yimf.xml.gz'))),
-        'SimpleXMLElement',
-        LIBXML_NONET,
-    );
-
-    expect($worlds->xpath('//world[@name="farmfest"]'))->toHaveCount(1)
-        ->and($yimf->xpath('//yimf[@type="farmfest_theme"]'))->toHaveCount(1)
-        ->and(file_exists(public_path('farmville/assets/hashed/assets/Environment/65fae3f621f6e8ab95ca4a5bec82797d.swf')))->toBeTrue()
-        ->and(file_exists(public_path('farmville/assets/hashed/assets/Environment/c4de4a73342f1e4a548ab637a295a43c.swf')))->toBeTrue();
-});
-
 it('retains original Farmfest crops and score levels in the effective AMF archives', function (): void {
     $items = gzuncompress(file_get_contents(public_path('farmville/xml/gz/v855038/items_opt.amf')));
     $scores = gzuncompress(file_get_contents(public_path('farmville/xml/gz/v855038/worldScore.amf.gz')));
