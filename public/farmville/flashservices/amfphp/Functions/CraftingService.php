@@ -141,6 +141,9 @@ class CraftingService
                 } else {
                     $completedRecipes[] = [
                         'recipeId' => (string) $queueItem->recipe_id,
+                        // CraftingCottageBuilding.recordRecipeFinished matches
+                        // the queued slot by both recipe ID and start_ts.
+                        'start_ts' => (int) $queueItem->start_ts,
                         'productItemCode' => $productItemCode,
                         'numGiftProducts' => $giftQty,
                         'recipeLevel' => $recipeLevel,

@@ -16,9 +16,9 @@ use App\Models\User;
 use App\Models\PlayerMeta;
 use App\Models\WorldActionReceipt;
 use App\Models\WorldObject;
+use App\Support\ConstructionMaterials;
 use App\Support\GarageEquipmentCatalog;
 use App\Support\ResourceAudit;
-use App\Support\StorageConfig;
 use App\Support\WorldPersistence;
 use App\Support\WorldCurrencyService;
 
@@ -1555,39 +1555,9 @@ class Player {
             return null;
         }
 
-        $storageType = $constructionItem['storageType'] ?? null;
-        $storageClass = is_array($storageType)
-            ? ($storageType['itemClass'] ?? null)
-            : (is_object($storageType) ? ($storageType->itemClass ?? null) : null);
-        $requirements = StorageConfig::constructionRequirements($storageClass);
-        if ($requirements === []) {
+        $materials = ConstructionMaterials::status($constructionItem, $contents);
+        if ($materials === null || !$materials['complete']) {
             return null;
-        }
-
-        foreach ($requirements as $partName => $required) {
-            $partItem = getItemByName((string) $partName, 'db');
-            $partCode = is_array($partItem) ? ($partItem['code'] ?? null) : null;
-            if (!is_string($partCode) || $partCode === '') {
-                return null;
-            }
-
-            $collected = 0;
-            foreach ($contents as $content) {
-                $itemCode = is_object($content)
-                    ? ($content->itemCode ?? null)
-                    : ($content['itemCode'] ?? null);
-                if ($itemCode !== $partCode) {
-                    continue;
-                }
-
-                $collected += max(0, (int) (is_object($content)
-                    ? ($content->numItem ?? 0)
-                    : ($content['numItem'] ?? 0)));
-            }
-
-            if ($collected < (int) $required) {
-                return null;
-            }
         }
 
         $finishedName = $constructionItem['finishedName'] ?? null;
@@ -1686,35 +1656,16 @@ class Player {
 
                 $constructionItem = getItemByName((string) $building->item_name, 'db');
                 $finishedName = is_array($constructionItem) ? ($constructionItem['finishedName'] ?? null) : null;
-                $defaultPart = is_array($constructionItem) ? ($constructionItem['defaultItem'] ?? null) : null;
-                $matsNeeded = is_array($constructionItem) ? (int) ($constructionItem['matsNeeded'] ?? 0) : 0;
-                if (is_object($defaultPart)) {
-                    $defaultPart = get_object_vars($defaultPart);
-                }
-
-                if (!is_string($finishedName) || $finishedName === ''
-                    || !is_array($defaultPart) || !is_string($defaultPart['name'] ?? null)
-                    || $matsNeeded <= 0) {
+                if (!is_string($finishedName) || $finishedName === '') {
                     return false;
                 }
 
-                $partItem = getItemByName($defaultPart['name'], 'db');
                 $finishedItem = getItemByName($finishedName, 'db');
-                if (!is_array($partItem) || !is_array($finishedItem)
-                    || !is_string($partItem['code'] ?? null) || $partItem['code'] === '') {
-                    return false;
-                }
-
-                $requiredParts = $matsNeeded * max(1, (int) ($defaultPart['amount'] ?? 1));
-                $storedParts = 0;
-                foreach (is_array($building->contents) ? $building->contents : [] as $content) {
-                    $itemCode = is_object($content) ? ($content->itemCode ?? null) : ($content['itemCode'] ?? null);
-                    $quantity = is_object($content) ? ($content->numItem ?? 0) : ($content['numItem'] ?? 0);
-                    if ($itemCode === $partItem['code']) {
-                        $storedParts += max(0, (int) $quantity);
-                    }
-                }
-                if ($storedParts < $requiredParts) {
+                $materials = ConstructionMaterials::status(
+                    $constructionItem,
+                    is_array($building->contents) ? $building->contents : [],
+                );
+                if (!is_array($finishedItem) || $materials === null || !$materials['complete']) {
                     return false;
                 }
 
@@ -1815,6 +1766,12 @@ class Player {
 
         UserMeta::invalidateCache($this->uid);
         return $completion;
+    }
+
+    /** Maintenance entry point; the same locked validation used by Flash. */
+    public function repairCompletedConstruction(string $worldType, int $objectId): bool
+    {
+        return is_object($this->completeConstructionBuilding($worldType, $objectId));
     }
 
     public function storeItem($buildingObj, $storeParams, bool $isGiftboxStore = false, ?string $idempotencyKey = null){

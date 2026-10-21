@@ -16,13 +16,15 @@ final class StorageConfig
 {
     /** @var array<string, array<string, int>>|null */
     private static ?array $constructionRequirements = null;
+    /** @var array<string, array<string, int>> */
+    private static array $dynamicConstructionRequirements = [];
 
     /**
      * Return the configured construction-part quantities for a storage class.
      *
      * @return array<string, int>
      */
-    public static function constructionRequirements(?string $storageClass): array
+    public static function constructionRequirements(?string $storageClass, bool $dynamic = false): array
     {
         $storageClass = trim((string) $storageClass);
         if ($storageClass === '') {
@@ -31,7 +33,9 @@ final class StorageConfig
 
         self::loadConstructionRequirements();
 
-        return self::$constructionRequirements[$storageClass] ?? [];
+        return $dynamic
+            ? (self::$dynamicConstructionRequirements[$storageClass] ?? [])
+            : (self::$constructionRequirements[$storageClass] ?? []);
     }
 
     private static function loadConstructionRequirements(): void
@@ -41,6 +45,7 @@ final class StorageConfig
         }
 
         self::$constructionRequirements = [];
+        self::$dynamicConstructionRequirements = [];
         $path = self::storageConfigPath();
         if ($path === null) {
             return;
@@ -81,16 +86,20 @@ final class StorageConfig
                 }
 
                 $parts = [];
+                $dynamicParts = [];
                 foreach (self::asList(self::member($record, 'itemName')) as $part) {
                     $name = trim((string) self::member($part, 'value'));
                     $need = (int) self::member($part, 'need');
                     if ($name !== '' && $need > 0) {
                         $parts[$name] = $need;
+                        $limit = (int) self::member($part, 'limit');
+                        $dynamicParts[$name] = $limit > 0 ? $limit : $need;
                     }
                 }
 
                 if ($parts !== []) {
                     self::$constructionRequirements[$storageClass] = $parts;
+                    self::$dynamicConstructionRequirements[$storageClass] = $dynamicParts;
                 }
             }
         } catch (\Throwable $exception) {
