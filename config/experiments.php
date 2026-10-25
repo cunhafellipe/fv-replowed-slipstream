@@ -1325,7 +1325,8 @@ return [
 "fv_rt_simneighborvisit" => 2,
 "fv_rt_harvesttime2" => 2,
 "fv_rt_craftingBooster2012" => 2,
-"fv_email_cc" => 2,
+// Retired email campaign: suppress its post-login "Free Stuff!" signup popup.
+"fv_email_cc" => 0,
 "fv_rt_1000FreeCustomer" => 0,
 "fv_rt_1000FreeCustomer_always_win" => 0,
 "fv_rt_coopReskin" => 0,

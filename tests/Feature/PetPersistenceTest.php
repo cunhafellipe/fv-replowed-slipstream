@@ -196,7 +196,7 @@ it('sells a following pet by its saved ID, not its newer client position', funct
         ->and($market->soldItems)->toBe(['husky_puppy_black_cash']);
 });
 
-it('feeds the specified owned puppy once per day and consumes exactly one kibble', function (): void {
+it('reports pet cooldown separately from a missing treat and consumes only successful feeds', function (): void {
     $world = UserWorld::query()->create([
         'uid' => '901281',
         'type' => 'farm',
@@ -211,9 +211,9 @@ it('feeds the specified owned puppy once per day and consumes exactly one kibble
         'lastName' => 'Tester',
     ]);
     Item::query()->create([
-        'name' => 'consume_kibble',
-        'code' => '0O',
-        'data' => serialize(['name' => 'consume_kibble', 'code' => '0O', 'className' => 'CPetsKibble']),
+        'name' => 'consume_treat',
+        'code' => '0z',
+        'data' => serialize(['name' => 'consume_treat', 'code' => '0z', 'className' => 'CPetsKibble']),
     ]);
     Item::clearCache();
 
@@ -223,6 +223,8 @@ it('feeds the specified owned puppy once per day and consumes exactly one kibble
         ['className' => 'Pet', 'subtype' => 'pets', 'code' => '71'],
         $placedAt,
     );
+    $petState->petLevel = 1;
+    $petState->levelStartTime = $placedAt;
     $pet = WorldObject::query()->create([
         'world_id' => $world->id,
         'object_id' => 17,
@@ -235,9 +237,114 @@ it('feeds the specified owned puppy once per day and consumes exactly one kibble
         'components' => (object) ['petState' => $petState],
         'deleted' => false,
     ]);
-    PlayerMeta::setValue($world->uid, 'giftbox', serialize(['0O' => [2, [], []]]));
+    PlayerMeta::setValue($world->uid, 'giftbox', serialize(['0z' => [2, [], []]]));
 
-    $request = static fn (int $targetId): object => (object) ['params' => [
+    $request = static function (int $targetId, string $targetField = 'targetPetId') use ($world): object {
+        $extraParams = [
+            'isGift' => true,
+            'isFree' => false,
+            'storageId' => GIFTBOX_ID,
+            'itemCount' => 1,
+            'targetUser' => $world->uid,
+            $targetField => $targetId,
+        ];
+
+        return (object) ['params' => [
+            ACTION_USE,
+            (object) ['itemName' => 'consume_treat'],
+            [(object) $extraParams],
+        ]];
+    };
+
+    $player = new Player($world->uid);
+    // The direct Feed menu still sends targetObjectId in older clients.
+    $first = WorldService::performAction($player, $request(17, 'targetObjectId'), null);
+    $duplicate = WorldService::performAction($player, $request(17), null);
+    $missing = WorldService::performAction($player, $request(18), null);
+
+    expect($first['data']['success'])->toBeTrue()
+        ->and($first['data']['petFed'])->toBeTrue()
+        ->and($duplicate['data']['success'])->toBeFalse()
+        ->and($duplicate['data']['errorCode'])->toBe('pet_already_fed_today')
+        ->and($missing['data']['success'])->toBeFalse()
+        ->and($missing['data']['errorCode'])->toBe('pet_not_found')
+        // The first adult treat advances level 1 to 2 and resets its count.
+        ->and($pet->fresh()->toFlashObject()->petLevel)->toBe(2)
+        ->and($pet->fresh()->toFlashObject()->kibbleFedCount)->toBe(0)
+        ->and($pet->fresh()->toFlashObject()->petName)->toBe('Rusty');
+    $giftbox = unserialize(PlayerMeta::getValue($world->uid, 'giftbox'), ['allowed_classes' => false]);
+    expect($giftbox['0z'][0])->toBe(1);
+
+    $secondPetState = PetState::initial(
+        (object) ['petName' => 'Scout', 'petGender' => 0, 'petType' => '71'],
+        ['className' => 'Pet', 'subtype' => 'pets', 'code' => '71'],
+        $placedAt,
+    );
+    $secondPetState->petLevel = 1;
+    $secondPetState->levelStartTime = $placedAt;
+
+    $secondPet = WorldObject::query()->create([
+        'world_id' => $world->id,
+        'object_id' => 18,
+        'class_name' => 'Pet',
+        'item_name' => 'bordercollie_puppy_red',
+        'position_x' => 6,
+        'position_y' => 4,
+        'position_z' => 0,
+        'plant_time' => $placedAt,
+        'components' => (object) ['petState' => $secondPetState],
+        'deleted' => false,
+    ]);
+    PlayerMeta::setValue($world->uid, 'giftbox', serialize([]));
+    $unavailable = WorldService::performAction($player, $request(18), null);
+
+    expect($unavailable['data']['success'])->toBeFalse()
+        ->and($unavailable['data']['errorCode'])->toBe('consumable_unavailable')
+        ->and($secondPet->fresh()->toFlashObject()->kibbleFedCount)->toBe(0);
+});
+
+it('explains the first-day pet cooldown without claiming a feed or spending food', function (): void {
+    $world = UserWorld::query()->create([
+        'uid' => '901283',
+        'type' => 'farm',
+        'sizeX' => 24,
+        'sizeY' => 24,
+        'objects' => '[]',
+        'messageManager' => serialize(['messages' => [], 'allowSendEmails' => true]),
+    ]);
+    UserMeta::query()->create([
+        'uid' => $world->uid,
+        'firstName' => 'New',
+        'lastName' => 'Pet',
+    ]);
+    Item::query()->create([
+        'name' => 'consume_kibble',
+        'code' => '0O',
+        'data' => serialize(['name' => 'consume_kibble', 'code' => '0O', 'className' => 'CPetsKibble']),
+    ]);
+    Item::clearCache();
+
+    $placedAt = (int) getCurrentTimeMs() - 60 * 60 * 1000;
+    $petState = PetState::initial(
+        (object) ['petName' => 'Sheba', 'petGender' => 0, 'petType' => '71'],
+        ['className' => 'Pet', 'subtype' => 'pets', 'code' => '71'],
+        $placedAt,
+    );
+    $pet = WorldObject::query()->create([
+        'world_id' => $world->id,
+        'object_id' => 29,
+        'class_name' => 'Pet',
+        'item_name' => 'shibainu_puppy_cream_cash',
+        'position_x' => 4,
+        'position_y' => 4,
+        'position_z' => 0,
+        'plant_time' => $placedAt,
+        'components' => (object) ['petState' => $petState],
+        'deleted' => false,
+    ]);
+    PlayerMeta::setValue($world->uid, 'giftbox', serialize(['0O' => [1, [], []]]));
+
+    $result = WorldService::performAction(new Player($world->uid), (object) ['params' => [
         ACTION_USE,
         (object) ['itemName' => 'consume_kibble'],
         [(object) [
@@ -246,23 +353,27 @@ it('feeds the specified owned puppy once per day and consumes exactly one kibble
             'storageId' => GIFTBOX_ID,
             'itemCount' => 1,
             'targetUser' => $world->uid,
-            'targetPetId' => $targetId,
+            'targetPetId' => 29,
         ]],
-    ]];
+    ]], null);
 
-    $player = new Player($world->uid);
-    $first = WorldService::performAction($player, $request(17), null);
-    $duplicate = WorldService::performAction($player, $request(17), null);
-    $missing = WorldService::performAction($player, $request(18), null);
-
-    expect($first['data']['success'])->toBeTrue()
-        ->and($first['data']['petFed'])->toBeTrue()
-        ->and($duplicate['data']['success'])->toBeFalse()
-        ->and($missing['data']['success'])->toBeFalse()
-        ->and($pet->fresh()->toFlashObject()->kibbleFedCount)->toBe(1)
-        ->and($pet->fresh()->toFlashObject()->petName)->toBe('Rusty');
+    expect($result['data']['success'])->toBeFalse()
+        ->and($result['data']['errorCode'])->toBe('pet_first_feed_not_ready')
+        ->and($result['data']['error'])->toContain('24 hours after placement')
+        ->and($result['data']['consumed'])->toBe(0)
+        ->and($pet->fresh()->toFlashObject()->kibbleFedCount)->toBe(0);
     $giftbox = unserialize(PlayerMeta::getValue($world->uid, 'giftbox'), ['allowed_classes' => false]);
     expect($giftbox['0O'][0])->toBe(1);
+
+    $firstFeed = PetState::feedResult(
+        (object) ['petState' => $petState],
+        $pet->item_name,
+        $placedAt,
+        $placedAt + 86400000,
+        'consume_kibble',
+    );
+    expect($firstFeed['reason'])->toBeNull()
+        ->and($firstFeed['state']->kibbleFedCount)->toBe(1);
 });
 
 it('uses treats for adult pets and advances their original trick levels', function (): void {

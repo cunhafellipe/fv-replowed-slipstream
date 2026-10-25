@@ -1192,6 +1192,54 @@ $baseUrl = rtrim((string) config('app.url'), '/');
                                 loadCurrentNeighbors();
                             } else if (tabName === 'find') {
                                 loadPotentialNeighbors();
+                            } else if (tabName === 'crops') {
+                                loadSuperCropRequests();
+                            }
+                        }
+
+                        async function loadSuperCropRequests() {
+                            const list = document.getElementById('superCropRequestList');
+                            list.textContent = 'Loading crop requests...';
+                            try {
+                                const response = await fetch('/super-crops/requests');
+                                if (!response.ok) throw new Error('Could not load crop requests');
+                                const data = await response.json();
+                                list.replaceChildren();
+                                if (!data.requests.length) {
+                                    list.textContent = 'No crop certifications are waiting for you.';
+                                    return;
+                                }
+                                for (const request of data.requests) {
+                                    const row = document.createElement('div');
+                                    row.className = 'neighbor-item';
+                                    const label = document.createElement('span');
+                                    label.textContent = `${request.owner} asks you to certify ${request.crop}`;
+                                    row.appendChild(label);
+                                    for (const [caption, accept] of [['Certify', true], ['Decline', false]]) {
+                                        const button = document.createElement('button');
+                                        button.className = 'btn-action ' + (accept ? 'btn-accept' : '');
+                                        button.textContent = caption;
+                                        button.onclick = async () => {
+                                            button.disabled = true;
+                                            try {
+                                                const reply = await fetch('/super-crops/respond', {
+                                                    method: 'POST',
+                                                    headers: {'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content},
+                                                    body: JSON.stringify({id: request.id, accept})
+                                                });
+                                                if (!reply.ok) throw new Error('The request could not be processed. Please refresh.');
+                                                await loadSuperCropRequests();
+                                            } catch (error) {
+                                                alert(error.message);
+                                                button.disabled = false;
+                                            }
+                                        };
+                                        row.appendChild(button);
+                                    }
+                                    list.appendChild(row);
+                                }
+                            } catch (error) {
+                                list.textContent = error.message;
                             }
                         }
 
@@ -1673,14 +1721,14 @@ $baseUrl = rtrim((string) config('app.url'), '/');
                             "master_assethash_url": "<?= $baseUrl ?>/farmville/assethash/v9/",
                             "masterysigns_amf_url": "<?= $baseUrl ?>/farmville/masterysigns/v1/",
                             "ITEMS_AMF_BUILD_TIME_REDUCTION": false,
-                            "swfLocation": "<?= $baseUrl ?>/farmville/embeds/Flash/v855037.855026/FarmGame-10-turbogrowth1.swf?restore_original=1",
+                            "swfLocation": "<?= $baseUrl ?>/farmville/embeds/Flash/v855037.855026/<?= config('market_innovations.enabled') ? 'FarmGame-10-market-hudallfarms3.swf' : 'FarmGame-10-standard-itemarray2.swf' ?>?restore_original=1",
                             "parts_count": 3,
                             "NO_FUEL_DAY_START_TIME": "1606723200",
                             "NO_FUEL_DAY_END_TIME": "1607328000",
                             "NO_FUEL_DAY_WORLDS": "yuletide",
                             "OPS_JS_GET_FRIENDS_PERMISSION": false,
-                            "game_config_url": "<?= $baseUrl ?>/farmville/xml/gz/v855038/gameSettings.xml.gz",
-                            "gameSettingsCMS_url": "<?= $baseUrl ?>/farmville/xml/gz/v855038/gameSettingsCMS.xml.gz",
+                            "game_config_url": "<?= $baseUrl ?><?= config('market_innovations.enabled') && config('market_innovations.farmers_enabled', true) ? '/farmville/market-game-settings-v1.xml.gz' : '/farmville/xml/gz/v855038/gameSettings.xml.gz' ?>",
+                            "gameSettingsCMS_url": "<?= $baseUrl ?><?= config('market_innovations.enabled') ? '/farmville/market-cms-v2/'.\App\Support\MarketSeason::cacheKey().'.xml.gz' : '/farmville/xml/gz/v855038/gameSettingsCMS.xml.gz' ?>",
                             "items_url": "<?= $baseUrl ?>/farmville/xml/gz/v855038-expansions-v2/items.xml.gz",
                             "IS_MASTERY_CLEANED": true,
                             "fgsm_amf_url": "<?= $baseUrl ?>/farmville/xml/gz/v855038/fgsm.amf.gz",
@@ -1902,6 +1950,7 @@ $baseUrl = rtrim((string) config('app.url'), '/');
                                     <button class="neighbor-tab" onclick="switchTab('find')" id="findTab" style="flex: 1; padding: 12px; background-color: #B8D4E3; color: #333; border: none; cursor: pointer; font-size: 14px; font-weight: bold; transition: background-color 0.3s;">
                                         Add Neighbors
                                     </button>
+                                    <button class="neighbor-tab" onclick="switchTab('crops')" id="cropsTab" style="flex: 1; padding: 12px; background-color: #B8D4E3; color: #333; border: none; cursor: pointer; font-size: 14px; font-weight: bold;">Crop Requests</button>
                                 </div>
                                 
                                 <!-- Content -->
@@ -1928,6 +1977,10 @@ $baseUrl = rtrim((string) config('app.url'), '/');
                                         <div id="findList" style="display: flex; flex-direction: column; gap: 10px;">
                                             <p style="text-align: center; color: #7F8C8D; font-style: italic;">Loading users...</p>
                                         </div>
+                                    </div>
+                                    <div id="cropsContent" class="tab-content" style="display: none;">
+                                        <p>Neighbors can certify your Super Crops here. Ask them to open Add Neighbors → Crop Requests.</p>
+                                        <div id="superCropRequestList" style="display: flex; flex-direction: column; gap: 10px;"></div>
                                     </div>
                                 </div>
                             </div>
@@ -2203,8 +2256,8 @@ $baseUrl = rtrim((string) config('app.url'), '/');
                                 </div>
                             </div>
                             <!-- PREFETCHED ASSETS -->
-                            <link rel="prefetch" href="<?= $baseUrl ?>/farmville/xml/gz/v855038/gameSettings.xml.gz">
-                            <link rel="prefetch" href="<?= $baseUrl ?>/farmville/xml/gz/v855038/gameSettingsCMS.xml.gz">
+                            <link rel="prefetch" href="<?= $baseUrl ?><?= config('market_innovations.enabled') && config('market_innovations.farmers_enabled', true) ? '/farmville/market-game-settings-v1.xml.gz' : '/farmville/xml/gz/v855038/gameSettings.xml.gz' ?>">
+                            <link rel="prefetch" href="<?= $baseUrl ?><?= config('market_innovations.enabled') ? '/farmville/market-cms-v2/'.\App\Support\MarketSeason::cacheKey().'.xml.gz' : '/farmville/xml/gz/v855038/gameSettingsCMS.xml.gz' ?>">
                             <link rel="prefetch" href="<?= $baseUrl ?>/farmville/xml/gz/v855038/FarmConfig.swf">
                             <link rel="prefetch" href="<?= $baseUrl ?>/farmville/xml/gz/v855038/en_US.swf">
                         </div>

@@ -1,4 +1,5 @@
-FROM php:8.4-apache
+# PHP 8.4.27 fixes PHP2Shell (CVE-2026-109618 and CVE-2026-109619).
+FROM php:8.4.27-apache
 
 # Laravel's MySQL driver, archive support, and the libraries required to
 # compile their corresponding PHP extensions.
@@ -57,7 +58,8 @@ RUN rm -rf public/farmville/flashservices/Tests \
     public/farmville/flashservices/Examples \
     public/farmville/flashservices/examples \
     public/farmville/flashservices/doc \
-    public/farmville/flashservices/docs
+    public/farmville/flashservices/docs \
+    && rm -f public/farmville/flashservices/amfphp/Services/ExampleService.php
 COPY resources ./resources
 COPY routes ./routes
 COPY scripts ./scripts
@@ -178,3 +180,9 @@ RUN sed -ri \
     -e 's/^ServerTokens .*/ServerTokens Prod/' \
     -e 's/^ServerSignature .*/ServerSignature Off/' \
     /etc/apache2/conf-enabled/security.conf
+
+# PHP may warn before the AMF gateway executes when Content-Length exceeds
+# post_max_size. Keep that warning out of the response so the gateway can
+# return its 413 status, and align PHP's upload threshold with the AMF cap.
+RUN printf '%s\n' 'display_errors=Off' 'display_startup_errors=Off' 'log_errors=On' 'post_max_size=16M' \
+    >> /usr/local/etc/php/conf.d/99-security.ini

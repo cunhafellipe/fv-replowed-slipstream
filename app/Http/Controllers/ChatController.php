@@ -13,36 +13,41 @@ class ChatController extends Controller
 {
     public function messages(Request $request)
     {
+        $validated = $request->validate([
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'before' => ['sometimes', 'integer', 'min:1'],
+        ]);
+
         try {
-            $limit = $request->input('limit', 50);
-            $before = $request->input('before');
+            $limit = (int) ($validated['limit'] ?? 50);
+            $before = $validated['before'] ?? null;
 
             $query = ChatMessage::with('user:uid,name')
                 ->orderBy('id', 'desc')
                 ->limit($limit);
 
-            if ($before) {
+            if ($before !== null) {
                 $query->where('id', '<', $before);
             }
 
             $messages = $query->get();
+            $profilePictures = DB::table('usermeta')
+                ->whereIn('uid', $messages->pluck('uid')->unique()->all())
+                ->pluck('profile_picture', 'uid');
 
-        // Transform messages with profile pictures
-        $transformedMessages = $messages->map(function ($message) {
-            $userMeta = DB::table('usermeta')
-                ->where('uid', $message->uid)
-                ->first();
+            // A bounded page uses one profile lookup instead of one per message.
+            $transformedMessages = $messages->map(function ($message) use ($profilePictures) {
+                $pic = $profilePictures->get($message->uid)
+                    ?: 'https://fv-assets.s3.us-east-005.backblazeb2.com/profile-pictures/default_avatar.png';
 
-            $pic = optional($userMeta)->profile_picture ?: 'https://fv-assets.s3.us-east-005.backblazeb2.com/profile-pictures/default_avatar.png';
-
-            return [
-                'id' => $message->id,
-                'message' => $message->message,
-                'username' => $message->user->name ?? 'Unknown',
-                'profilePicture' => $pic,
-                'createdAt' => $message->created_at->toIso8601String(),
-            ];
-        });
+                return [
+                    'id' => $message->id,
+                    'message' => $message->message,
+                    'username' => $message->user->name ?? 'Unknown',
+                    'profilePicture' => $pic,
+                    'createdAt' => $message->created_at->toIso8601String(),
+                ];
+            });
 
             return response()->json([
                 'messages' => array_reverse($transformedMessages->toArray()),

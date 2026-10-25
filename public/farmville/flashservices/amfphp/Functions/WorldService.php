@@ -12,12 +12,14 @@ use App\Helpers\JsonHelper;
 use App\Models\PlayerMeta;
 use App\Models\UserMeta;
 use App\Models\WorldObject;
+use App\Support\ConstructionMaterials;
 use App\Support\ConsumableActionHandler;
 use App\Support\CraftingCottages;
 use App\Support\PetState;
 use App\Support\PetActionHandler;
 use App\Support\PlowFuelDiscovery;
 use App\Support\StorageActionHandler;
+use App\Support\SuperCrops;
 use App\Support\WorldPersistence;
 
 class WorldService
@@ -480,38 +482,22 @@ class WorldService
         }
 
         $constructionItem = getItemByName((string) $building->item_name, 'db');
-        $finishedName = $constructionItem['finishedName'] ?? null;
-        $defaultPart = $constructionItem['defaultItem'] ?? null;
-        $materialsNeeded = (int) ($constructionItem['matsNeeded'] ?? 0);
-
-        if (is_object($defaultPart)) {
-            $defaultPart = get_object_vars($defaultPart);
-        }
-
-        if (!is_string($finishedName) || $finishedName === ''
-            || !is_array($defaultPart) || !is_string($defaultPart['name'] ?? null)
-            || $materialsNeeded <= 0) {
+        $finishedName = is_array($constructionItem) ? ($constructionItem['finishedName'] ?? null) : null;
+        if (!is_string($finishedName) || $finishedName === '') {
             return null;
         }
 
         $finishedItem = getItemByName($finishedName, 'db');
-        $partItem = getItemByName($defaultPart['name'], 'db');
-        if (!$finishedItem || !$partItem || !isset($partItem['code'])) {
+        $materials = ConstructionMaterials::status(
+            $constructionItem,
+            is_array($building->contents) ? $building->contents : [],
+        );
+        if (!is_array($finishedItem) || $materials === null) {
             return null;
         }
 
-        $requiredParts = $materialsNeeded * max(1, (int) ($defaultPart['amount'] ?? 1));
-        $collectedParts = 0;
-        foreach (is_array($building->contents) ? $building->contents : [] as $content) {
-            $itemCode = is_object($content) ? ($content->itemCode ?? null) : ($content['itemCode'] ?? null);
-            $quantity = is_object($content) ? ($content->numItem ?? 0) : ($content['numItem'] ?? 0);
-            if ($itemCode === $partItem['code']) {
-                $collectedParts += max(0, (int) $quantity);
-            }
-        }
-
         return [
-            'cashCost' => max(0, $requiredParts - $collectedParts) * max(0, (int) ($partItem['cash'] ?? 0)),
+            'cashCost' => $materials['cashCost'],
             'finishedName' => $finishedName,
             'finishedClassName' => $finishedItem['className'] ?? 'Building',
             'finishedState' => 'built',
@@ -689,6 +675,15 @@ class WorldService
         $data = array("id" => 0, "data" => array("id" => 0));
         $action = $request->params[0];
 
+        // Reject locked Super Crops before removing energy or changing a plot.
+        if ($action === ACTION_PLANT) {
+            $itemName = $request->params[1]->itemName ?? null;
+            if (is_string($itemName) && !SuperCrops::canPlant($playerObj->getUid(), $itemName)) {
+                return ['id' => 0, 'data' => ['id' => 0, 'success' => false,
+                    'error' => 'Super Crop is not unlocked']];
+            }
+        }
+
         $extraParams = (isset($request->params[2]) && is_array($request->params[2]) && isset($request->params[2][0]))
             ? $request->params[2][0] : null;
 
@@ -698,7 +693,8 @@ class WorldService
         }
 
         $energyRemoved = false;
-        if ($energyCost > 0) {
+        // New plows must pass terrain validation before spending any energy.
+        if ($energyCost > 0 && $action !== ACTION_PLOW) {
             $uid = $playerObj->getUid();
             $energyRemoved = UserResources::removeEnergy($uid, $energyCost);
         }
@@ -1422,6 +1418,28 @@ class WorldService
                 $existingIsPlot = $existingPlot !== null
                     && stripos($existingClassName, 'Plot') !== false;
 
+                if (!$existingIsPlot && ($terrainError = getNewPlotTerrainError($world, $posX, $posY)) !== null) {
+                    Logger::warning('PlowAudit', 'Single plow rejected for terrain', [
+                        'uid' => (string) $uid,
+                        'world_type' => $currentWorldType,
+                        'x' => $posX,
+                        'y' => $posY,
+                        'reason' => $terrainError,
+                    ]);
+                    // A success:false payload alone is ignored by TPlow.
+                    // Use the AMF error envelope so optimistic local changes
+                    // cannot masquerade as an accepted server transaction.
+                    return [
+                        'errorType' => 1,
+                        'errorData' => 'Cannot plow here: the entire plot must be on plowable terrain. Reload the farm to resync.',
+                        'data' => ['id' => 0, 'success' => false, 'reason' => $terrainError],
+                    ];
+                }
+
+                if ($energyCost > 0) {
+                    $energyRemoved = UserResources::removeEnergy($uid, $energyCost);
+                }
+
                 if ($existingIsPlot) {
                     $existingState = getEffectivePlotState(
                         $existingPlot,
@@ -2049,8 +2067,9 @@ class WorldService
                 );
                 if (empty($useResult['success'])) {
                     Logger::log(self::LOG, sprintf(
-                        'Consumable use rejected: uid=%s, reason=%s',
+                        'Consumable use rejected: uid=%s, code=%s, reason=%s',
                         $playerObj->getUid(),
+                        $useResult['errorCode'] ?? 'unspecified',
                         $useResult['error'] ?? 'unavailable',
                     ));
                 }

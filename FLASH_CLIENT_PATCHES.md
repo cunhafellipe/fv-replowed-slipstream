@@ -675,3 +675,90 @@ rejected response. The four FFDec import sources are under
 re-exported with FFDec 26.2.1. Existing game windows must reload to receive
 the filename-revisioned client. The full Laravel suite and a player-driven
 pet lifecycle test remain outstanding.
+
+## Direct pet-menu feeding
+
+The pet context-menu Feed action uses `TUseTargetedConsumable`, rather than
+`TUseConsumable`. This follow-up imports `CPetsKibble` and the targeted
+transaction patch into both client variants selected by `game.blade.php`.
+The transaction forwards the pet target field, applies feeding only after
+server acceptance, and restores the optimistically removed Giftbox item if
+the request is rejected. Rejections now display the server's explanation
+(for example, “This pet has already been fed today.”) and confirm that no
+treat was used. A missing response asks the player to reload and verify state.
+The server accepts the old `targetObjectId` payload as a compatibility alias
+for cached clients. The market-enabled build is
+`FarmGame-10-marketrevival10.swf`; the standard build is
+`FarmGame-10-petfeed3.swf`.
+
+## Off-world seed task buttons
+
+The Farmers Market can assign seeds that belong to a different farm, such as
+California Fuchsias (Harvest Valley) while the player is on My Australia Farm.
+`PlantSeedHelperAction` now checks the seed's `WorldRequirement` before opening
+the mini-market. It offers the normal travel confirmation for an unlocked
+required farm, and shows a specific explanation if the farm is locked or still
+loading. The player can use Plant again after arriving. Other eligible seeds
+still open the mini-market normally.
+
+This change is compiled into both selected clients:
+`FarmGame-10-marketplantworld1.swf` (market enabled) and
+`FarmGame-10-petfeedplantworld1.swf` (standard). The import source and build
+hashes are in `fv-decompiled-swf/patches/` and `fv-decompiled-swf/metadata/`.
+
+## Super Crop unlock failure feedback
+
+The Super Crop unlock flow now handles server rejections and AMF faults. The
+client closes its wait dialog, explains known failures such as insufficient
+Farm Cash or changed requirements, and warns players to reopen the Market to
+check state if the server response was lost. Other friend-set transactions
+retain their existing success behavior. The market-enabled client is
+`FarmGame-10-market-supercropfail1.swf`; the standard client is
+`FarmGame-10-standard-supercropfail1.swf`. Both were built from the selected
+clients with FFDec 26.2.1 and re-exported to verify the handlers. Interactive
+in-game failure testing remains outstanding.
+
+## Travel to unavailable farms
+
+The Flash travel panel can display client-only unlocked farms that the server
+has not enabled for the player. Previously it closed the panel and started
+world loading, then the server rejected the request and the client entered its
+load-error/redirect loop. The client now snapshots the server's InitUser farm
+list, shows a clear availability message before closing the panel for an
+unsupported owned farm, and guards other `swapFarm` callers before loading.
+Static visitor scenes remain allowed. The market and standard clients are
+`FarmGame-10-market-travelguard1.swf` and
+`FarmGame-10-standard-travelguard1.swf`. Both were re-exported to verify the
+guard; in-game testing remains outstanding.
+
+## Farmers Market task-slot button overlap
+
+Redeemed task slots previously retained their completed progress after the
+server removed their task ID. The client then treated the slot as both awaiting
+a new task and redeemable, stacking Redeem behind Show me!. The server now
+clears progress for all completed ID-less slots and normalizes older saves on
+load. The market client also refuses to show Redeem for a dumped/ID-less slot,
+even if it receives stale progress. The market-enabled build is
+`FarmGame-10-market-taskslot1.swf`, based on `market-travelguard1`; the standard
+client is unchanged. FFDec 26.2.1 re-exported the patched class to verify the
+guard. Interactive in-game testing remains outstanding.
+
+## Indexed item image data sources
+
+Turkey Roost crashed while attaching stored turkeys because
+`ZItemBase.getStringAtIndexFromDataSource` cast the result of `getData` to an
+array. In the optimized-item experiment, `getData("image")` returns an
+`OptItemDataSource`, while `getArray("image")` returns the indexed wrapper
+array the helper expects. The same helper also serves Pigpen, so the shared
+method was corrected in both client variants, but the first builds
+(`market-itemarray1` and `standard-itemarray1`) are **unsafe**. FFDec's source
+rendered `ZItemBase.INVALID_VALUE:int` as `3735929069` rather than the signed
+`-559038227`; the market build caused Flash VerifyError #1102 on startup.
+Production was rolled back on 2026-10-18 to the known-good
+`FarmGame-10-market-taskslot1.swf` / `FarmGame-10-standard-travelguard1.swf`
+selectors, then the corrected `market-itemarray2` and `standard-itemarray2`
+builds were deployed. Their re-exported p-code has the valid signed trait
+default and `getArray` call. Host, running web-container, and HTTP-served
+hashes match. The Turkey Roost/Pigpen fix is selected, but has not yet been
+tested in-game. The prior view is backed up at
+`[private deployment backup]`.

@@ -12,6 +12,10 @@ it('uses the authentic completed terrain configuration for Winter Fable', functi
     expect(getTileSetForWorld('winternord'))->toBe('winternord_theme');
 });
 
+it('uses Harvest Valley\'s archived farmfest terrain theme', function (): void {
+    expect(getTileSetForWorld('farmfest'))->toBe('farmfest_theme');
+});
+
 it('maps the early expansion worlds to their themed terrain configurations', function (): void {
     expect(getTileSetForWorld('asia'))->toBe('asia')
         ->and(getTileSetForWorld('hawaii'))->toBe('hawaii');
@@ -155,6 +159,153 @@ it('keeps the authored Jade Falls base fixed when the world expands', function (
     }
 });
 
+it('continues the northeast Jade Falls terrace into the expanded rows', function (): void {
+    $terrain = getApproximateWorldTerrain('asia', 146, 146);
+    $width = 73;
+    $baseOffset = 48;
+    $sceneCell = static fn (int $x, int $y): int =>
+        $terrain[($baseOffset + $y) * $width + $baseOffset + $x];
+
+    expect($sceneCell(23, 0))->toBe(4)
+        ->and($sceneCell(24, 0))->toBe(4)
+        ->and($sceneCell(23, -1))->toBe(4)
+        ->and($sceneCell(24, -1))->toBe(4)
+        ->and($sceneCell(23, -2))->toBe(4)
+        ->and($sceneCell(24, -2))->toBe(4);
+});
+
+it('continues the Jade Falls upper green shelf into negative x coordinates', function (): void {
+    $terrain = getApproximateWorldTerrain('asia', 146, 146);
+    $width = 73;
+    $baseOffset = 48;
+    $sceneCell = static fn (int $x, int $y): int =>
+        $terrain[($baseOffset + $y) * $width + $baseOffset + $x];
+
+    foreach ([21 => -2, 22 => -4, 23 => -6, 24 => -8] as $y => $leftX) {
+        for ($x = $leftX; $x <= 0; $x++) {
+            expect($sceneCell($x, $y))->toBe(4);
+        }
+    }
+
+    expect($sceneCell(-3, 23))->toBe(4)
+        ->and($sceneCell(-2, 23))->toBe(4)
+        ->and($sceneCell(-3, 24))->toBe(4)
+        ->and($sceneCell(-2, 24))->toBe(4)
+        // The separate western strip and the traced river are unchanged.
+        ->and($sceneCell(-10, 24))->toBe(4)
+        ->and($sceneCell(-5, 0))->toBe(2);
+});
+
+it('maps the visible western Jade Falls terrace and cliff separately', function (): void {
+    $terrain = getApproximateWorldTerrain('asia', 190, 190);
+    $width = 95;
+    $offset = 70;
+    $cell = static fn (int $x, int $y): int =>
+        $terrain[($offset + $y) * $width + $offset + $x];
+
+    foreach ([
+        13 => [-52, -48],
+        14 => [-49, -45],
+        15 => [-46, -43],
+        16 => [-43, -40],
+        17 => [-42, -38],
+        18 => [-40, -35],
+        19 => [-38, -31],
+        20 => [-35, -27],
+        21 => [-30, -23],
+        22 => [-24, -20],
+        23 => [-20, -18],
+        24 => [-17, -16],
+    ] as $y => [$first, $last]) {
+        expect($cell($first, $y))->toBe(3)
+            ->and($cell($last, $y))->toBe(3);
+    }
+
+    foreach ([
+        10 => [[-53, -36], [-35, -31]],
+        11 => [[-51, -34], [-33, -28]],
+        12 => [[-49, -31], [-30, -25]],
+        13 => [[-47, -26], [-25, -21]],
+        14 => [[-44, -21], [-20, -17]],
+    ] as $y => [[$terraceStart, $terraceEnd], [$cliffStart, $cliffEnd]]) {
+        expect($cell($terraceStart, $y))->toBe(4)
+            ->and($cell($terraceEnd, $y))->toBe(4)
+            ->and($cell($cliffStart, $y))->toBe(3)
+            ->and($cell($cliffEnd, $y))->toBe(3);
+    }
+
+    expect($cell(-24, 24))->toBe(4)
+        ->and($cell(-40, 24))->toBe(4)
+        ->and($cell(-36, 20))->toBe(4)
+        ->and($cell(-26, 20))->toBe(4)
+        ->and($cell(-24, 10))->toBe(1)
+        ->and($cell(-20, 13))->toBe(1)
+        ->and($cell(-49, 20))->toBe(1)
+        ->and($cell(-5, 0))->toBe(2);
+});
+
+it('traces the photographed southwest Jade Falls ridge without covering its terrace lip', function (): void {
+    $terrain = getApproximateWorldTerrain('asia', 190, 190);
+    $width = 95;
+    $offset = 70;
+    $cell = static fn (int $x, int $y): int =>
+        $terrain[($offset + $y) * $width + $offset + $x];
+
+    for ($y = -14; $y <= 9; $y++) {
+        expect($cell($y - 37, $y))->toBe(1)
+            ->and($cell($y - 36, $y))->toBe(3)
+            ->and($cell($y - 35, $y))->toBe(3)
+            ->and($cell($y - 34, $y))->toBe(4);
+    }
+
+    // Do not extend the photographed band into untraced rows.
+    expect($cell(-51, -15))->toBe(1)
+        ->and($cell(-26, 10))->toBe(1);
+});
+
+it('maps the traced Jade Falls ocean below the former all-land expansion', function (): void {
+    $terrain = getApproximateWorldTerrain('asia', 190, 190);
+    $width = 95;
+    $baseOffset = 70;
+    $sceneCell = static fn (int $x, int $y): int =>
+        $terrain[($baseOffset + $y) * $width + $baseOffset + $x];
+
+    foreach ([
+        -49 => -48, -50 => -49, -51 => -49, -52 => -50,
+        -53 => -50, -54 => -51, -55 => -51, -56 => -50,
+        -57 => -49, -58 => -49, -59 => -48, -60 => -48,
+        -61 => -48, -62 => -48, -63 => -48, -64 => -48,
+        -65 => -48, -66 => -47, -67 => -47, -68 => -46,
+    ] as $y => $waterStart) {
+        expect($sceneCell($waterStart - 2, $y))->toBe(1)
+            ->and($sceneCell($waterStart - 1, $y))->toBe(3)
+            ->and($sceneCell($waterStart, $y))->toBe(2);
+    }
+
+    expect($sceneCell(0, -49))->toBe(2)
+        ->and($sceneCell(0, -64))->toBe(2)
+        // The newly visible green peninsula must not be submerged.
+        ->and($sceneCell(-51, -65))->toBe(1)
+        ->and($sceneCell(-50, -65))->toBe(1)
+        ->and($sceneCell(-49, -65))->toBe(3)
+        ->and($sceneCell(-48, -65))->toBe(2)
+        ->and($sceneCell(-49, -66))->toBe(1)
+        ->and($sceneCell(-48, -66))->toBe(3)
+        ->and($sceneCell(-47, -66))->toBe(2)
+        ->and($sceneCell(-48, -68))->toBe(1)
+        ->and($sceneCell(-47, -68))->toBe(3)
+        ->and($sceneCell(-46, -68))->toBe(2)
+        ->and($sceneCell(-40, -68))->toBe(2)
+        ->and($sceneCell(-39, -68))->toBe(3)
+        ->and($sceneCell(-34, -68))->toBe(1)
+        ->and($sceneCell(-27, -68))->toBe(3)
+        ->and($sceneCell(-26, -68))->toBe(2)
+        // Existing far-left buildings and the planted upper bank stay land.
+        ->and($sceneCell(-65, -68))->toBe(1)
+        ->and($sceneCell(-17, -43))->toBe(1)
+        ->and($sceneCell(-3, -45))->toBe(1);
+});
+
 it('applies the hand-authored Jade Falls river to negative scene coordinates', function (): void {
     $expansion = getJadeFallsExpansionTerrain();
 
@@ -176,7 +327,8 @@ it('applies the hand-authored Jade Falls river to negative scene coordinates', f
         ->and($expansion['-42,-8'])->toBe('T')
         ->and($expansion['-48,-14'])->toBe('T')
         ->and($expansion['-34,0'])->toBe('T')
-        ->and($expansion['-24,10'])->toBe('T')
+        // The completed southwest ridge trace leaves this far-side cell land.
+        ->and($expansion['-24,10'])->toBe('L')
         ->and($expansion['-10,24'])->toBe('T')
         ->and($expansion['-48,4'])->toBe('T')
         ->and($expansion['-44,8'])->toBe('T')

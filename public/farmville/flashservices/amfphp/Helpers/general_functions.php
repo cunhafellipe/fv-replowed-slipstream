@@ -1456,6 +1456,42 @@
         // At the bottom edge, the river and ocean join continuously.
         $setRange(-48, -48, 24, 'W');
 
+        // Jade Falls' open water continues below that edge. These are scene
+        // coordinates, not raw terrain-array offsets. The green mainland
+        // bends east again from y=-56; a steadily westward-moving shoreline
+        // incorrectly submerged the visible green peninsula near (-51,-65).
+        // The cell immediately west of each water start is shoreline; cells
+        // farther west remain land.
+        $oceanStartByY = [
+            -49 => -48, -50 => -49, -51 => -49, -52 => -50,
+            -53 => -50, -54 => -51, -55 => -51, -56 => -50,
+            -57 => -49, -58 => -49, -59 => -48, -60 => -48,
+            -61 => -48, -62 => -48, -63 => -48, -64 => -48,
+            -65 => -48, -66 => -47, -67 => -47, -68 => -46,
+        ];
+
+        foreach ($oceanStartByY as $y => $waterStart) {
+            $set($waterStart - 1, $y, 'S');
+
+            if ($y >= -64) {
+                $setRange($y, $waterStart, 24, 'W');
+                continue;
+            }
+
+            // The small green bank at the southeast edge enters these rows.
+            // Leave its uncertain cells as land instead of flooding it.
+            [$westWaterEnd, $eastWaterStart] = match ($y) {
+                -65 => [-37, -29],
+                -66 => [-38, -28],
+                -67 => [-39, -27],
+                -68 => [-40, -26],
+            };
+            $setRange($y, $waterStart, $westWaterEnd, 'W');
+            $set($westWaterEnd + 1, $y, 'S');
+            $set($eastWaterStart - 1, $y, 'S');
+            $setRange($y, $eastWaterStart, 24, 'W');
+        }
+
         // Far-left terrace/cliff strip.
         $setRange(-8, -42, -41, 'T');
         $setRange(-9, -44, -42, 'T');
@@ -1464,6 +1500,12 @@
         $setRange(-12, -47, -46, 'T');
         $setRange(-13, -48, -47, 'T');
         $set(-48, -14, 'T');
+
+        // Terrace lip adjoining the northeast edge of the original scene.
+        // The base mask already marks (23,0) and (24,0) as T; these two
+        // cells continue that terrace into the expanded rows at y=-1 and y=-2.
+        $setRange(-1, 23, 24, 'T');
+        $setRange(-2, 23, 24, 'T');
 
         /*
          * ============================================================
@@ -1484,6 +1526,90 @@
         for ($y = 4; $y <= 24; $y++) {
             $x = $y - 52;
             $setRange($y, $x, $x + 1, 'T');
+        }
+
+        // Green shelf between the lower cliff face and the original scene.
+        // The base mask marks (0,21..24) as terrace, but negative-x expansion
+        // cells beside it were left as ordinary land. Trace only the visible
+        // upper shelf; the gray cliff and lower rows still need their own map.
+        $upperShelfByY = [
+            21 => [-2, -1],
+            22 => [-4, -1],
+            23 => [-6, -1],
+            24 => [-8, -1],
+        ];
+
+        foreach ($upperShelfByY as $y => [$x1, $x2]) {
+            $setRange($y, $x1, $x2, 'T');
+        }
+
+        // The expanded west side has a broad green terrace, not just the
+        // two narrow terrace lips above. Trace the section visible in the
+        // paired Jade Falls screenshots (scene y=15..24). Keep the western
+        // and southern edges outside this view at their existing values.
+        for ($y = 15; $y <= 24; $y++) {
+            $setRange($y, -47, -15, 'T');
+        }
+
+        // The gray cliff cuts across that terrace. Limit non-plowable cells
+        // to its visible core rather than widening the ridge into green art.
+        $westCliffByY = [
+            13 => [-52, -48],
+            14 => [-49, -45],
+            15 => [-46, -43],
+            16 => [-43, -40],
+            17 => [-42, -38],
+            18 => [-40, -35],
+            19 => [-38, -31],
+            20 => [-35, -27],
+            21 => [-30, -23],
+            22 => [-24, -20],
+            23 => [-20, -18],
+            24 => [-17, -16],
+        ];
+
+        foreach ($westCliffByY as $y => [$x1, $x2]) {
+            $setRange($y, $x1, $x2, 'S');
+        }
+
+        // The lower edge of the same view exposes a second, narrower ridge.
+        // Green between the ridges remains terrace; ground beyond this lower
+        // gray face keeps its ordinary-land fallback until traced farther on.
+        $lowerShelfByY = [
+            10 => [-53, -36],
+            11 => [-51, -34],
+            12 => [-49, -31],
+            13 => [-47, -26],
+            14 => [-44, -21],
+        ];
+        $lowerCliffByY = [
+            10 => [-35, -31],
+            11 => [-33, -28],
+            12 => [-30, -25],
+            13 => [-25, -21],
+            14 => [-20, -17],
+        ];
+
+        foreach ($lowerShelfByY as $y => [$x1, $x2]) {
+            $setRange($y, $x1, $x2, 'T');
+        }
+        foreach ($lowerCliffByY as $y => [$x1, $x2]) {
+            $setRange($y, $x1, $x2, 'S');
+
+            // The old eastern two-cell terrace lip lands below this ridge
+            // on these rows. Restore ordinary ground on its far side.
+            $oldLipX = $y - 34;
+            if ($oldLipX + 1 > $x2) {
+                $setRange($y, max($x2 + 1, $oldLipX), $oldLipX + 1, 'L');
+            }
+        }
+
+        // The next exposed ridge continues diagonally southwest through the
+        // expansion. The plot-covered reference view exposes this two-cell
+        // cliff immediately west of the narrow terrace lip (x=y-34..y-33).
+        // Stop at the photographed edges; the ridge beyond them is untraced.
+        for ($y = -14; $y <= 9; $y++) {
+            $setRange($y, $y - 36, $y - 35, 'S');
         }
 
         /*
@@ -1998,6 +2124,50 @@
         return $terrain;
     }
 
+    /**
+     * Validate a NEW standard Plot against the authoritative world mask.
+     * Flash Plot.SIZE_X/Y are 4; terrain cells cover 2x2 world units. Never
+     * use client-supplied dimensions or terrain codes to approve placement.
+     * Existing plots are deliberately not migrated/deleted by this check.
+     */
+    function getNewPlotTerrainError(array $world, $x, $y): ?string {
+        foreach ([$x, $y] as $coordinate) {
+            if (!is_numeric($coordinate) || !is_finite((float) $coordinate)
+                || floor((float) $coordinate) !== (float) $coordinate) {
+                return 'invalid_position';
+            }
+        }
+
+        $sizeX = (int) ($world['sizeX'] ?? 0);
+        $sizeY = (int) ($world['sizeY'] ?? 0);
+        if ($x < 0 || $y < 0 || $x + 4 > $sizeX || $y + 4 > $sizeY) {
+            return 'outside_world';
+        }
+
+        // getWorldByType constructs this mask on the server. Ordinary farms
+        // have no invisible terrain map and retain their normal land behavior.
+        $terrain = $world['terrain'] ?? [];
+        if ($terrain === []) {
+            return null;
+        }
+
+        $width = intdiv($sizeX, 2);
+        for ($tileY = (int) floor($y / 2); $tileY < (int) ceil(($y + 4) / 2); $tileY++) {
+            for ($tileX = (int) floor($x / 2); $tileX < (int) ceil(($x + 4) / 2); $tileX++) {
+                $code = $terrain[$tileY * $width + $tileX] ?? null;
+                // gameSettings primary plowable terrains: land, water,
+                // terrace, underwater, earth, zen, snow, turtle, dream.
+                // Shoreline (3), dead (254), and unknown cells
+                // must NOT fall through to the ordinary land-plot behavior.
+                if (!in_array($code, [1, 2, 4, 5, 6, 7, 8, 9, 10], true)) {
+                    return 'non_plowable_terrain';
+                }
+            }
+        }
+
+        return null;
+    }
+
     function getWorldByType($uid, $type = "farm"){
         if (!isset($GLOBALS['_world_cache'])) {
             $GLOBALS['_world_cache'] = [];
@@ -2435,6 +2605,9 @@
             "glen"              => "glen_theme",
             "atlantis"          => "atlantis_theme",
             "hallow"            => "hallow_theme",
+            // Harvest Valley is internally named farmfest; its authored YIMF
+            // terrain/background configuration is already in the archive.
+            "farmfest"          => "farmfest_theme",
             // These early expansion YIMF terrain configurations use the
             // internal world IDs directly (see yimf.xml).
             "asia"              => "asia",

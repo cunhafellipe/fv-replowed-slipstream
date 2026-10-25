@@ -61,6 +61,19 @@ final class QuestCategoryResolver
             'buttersugarcorn' => ['ButterAndSugarCorn'],
         ];
         $normalizedItemName = strtolower($itemName);
+        // The 2020 market boards use world-wide animal/tree categories, but
+        // the imported item records carry only a world-coded name and type.
+        // Build those categories from both fields so a crop with the same
+        // prefix cannot be counted as an animal or tree.
+        $worldFamily = str_contains($normalizedItemName, '_xfs_') || str_starts_with($normalizedItemName, 'xfs_')
+            ? 'Farmfest'
+            : (str_contains($normalizedItemName, '_xah_') || str_starts_with($normalizedItemName, 'xah_')
+                ? 'Aloha'
+                : null);
+        $itemType = strtolower((string) ($itemData['type'] ?? ''));
+        if ($worldFamily !== null && in_array($itemType, ['animal', 'tree'], true)) {
+            $categories[] = 'All'.$worldFamily.($itemType === 'animal' ? 'Animals' : 'Trees');
+        }
         foreach ($aliases[$normalizedItemName] ?? [] as $category) {
             $categories[] = $category;
         }

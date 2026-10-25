@@ -920,4 +920,18 @@ class UserService{
             ],
         ];
     }
+
+    /** FS07 uses the same local-neighbor selector as other offline MFS requests. */
+    public static function getFriendSetFriends($playerObj, $request = null, $market = null): array
+    {
+        if (($request->params[1] ?? null) !== 'SuperCrops'
+            || ($request->params[2] ?? null) !== 'FS07') {
+            return ['data' => ['requestedFriends' => new \stdClass()]];
+        }
+
+        $specs = $request->params[0] ?? [];
+        $types = is_array($specs) ? array_values(array_filter($specs, 'is_string')) : [];
+        $adapted = (object) ['params' => [null, null, null, $types]];
+        return self::getAskItemFriends($playerObj, $adapted, $market);
+    }
 }

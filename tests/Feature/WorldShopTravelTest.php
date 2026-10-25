@@ -239,6 +239,47 @@ it('disables Maple Frontier even for players who previously unlocked it', functi
     ]);
 });
 
+it('keeps Harvest Valley locked until its world revival is ready', function (): void {
+    if (! defined('AMFPHP_ROOTPATH')) {
+        define('AMFPHP_ROOTPATH', dirname(__DIR__, 2).'/public/farmville/flashservices/amfphp/');
+    }
+
+    require_once AMFPHP_ROOTPATH.'Helpers/logger.php';
+    require_once AMFPHP_ROOTPATH.'Helpers/general_functions.php';
+    require_once AMFPHP_ROOTPATH.'Helpers/user_resources.php';
+    require_once AMFPHP_ROOTPATH.'Functions/WorldService.php';
+    require_once AMFPHP_ROOTPATH.'Helpers/player.php';
+
+    $user = createWorldShopUser(250);
+    PlayerMeta::create([
+        'uid' => $user->uid,
+        'meta_key' => 'unlocked_worlds',
+        'meta_value' => serialize(['farmfest']),
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/world-shop/status')
+        ->assertOk()
+        ->assertJson([
+            'unlockedWorlds' => ['farm'],
+            'purchasedWorlds' => [],
+        ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/world-shop/claim', ['worldId' => 'farmfest'])
+        ->assertBadRequest();
+
+    $this->actingAs($user)
+        ->postJson('/api/world-shop/travel', ['worldId' => 'farmfest'])
+        ->assertBadRequest();
+
+    expect(getUnlockedWorlds($user->uid))->toBe(['farm']);
+
+    $request = (object) ['params' => ['farmfest']];
+    expect(fn () => WorldService::loadOwnWorld(new Player($user->uid), $request))
+        ->toThrow(RuntimeException::class, 'World is not unlocked: farmfest');
+});
+
 it('rejects travel to a locked world', function (): void {
     $user = User::factory()->create();
 

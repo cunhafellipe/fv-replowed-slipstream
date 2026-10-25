@@ -26,7 +26,22 @@ class Amfphp_Core_HttpRequestGatewayFactory {
      * @return <String> it's a binary stream, but there seems to be no better type than String for this.
      */
     static protected function getRawPostData(){
-    	return file_get_contents('php://input');
+	// Other (development-only) entry points may call the factory directly.
+	// Keep those callers bounded too instead of reading an unlimited body.
+	require_once dirname(__FILE__) . '/../Helpers/request_body.php';
+	$stream = fopen('php://input', 'rb');
+	if ($stream === false) {
+	    throw new RuntimeException('Could not open AMF request body.');
+	}
+	try {
+	    return amfReadBoundedRequestBody(
+	        $stream,
+	        amfConfiguredBodyLimit(),
+	        isset($_SERVER['CONTENT_LENGTH']) ? (string) $_SERVER['CONTENT_LENGTH'] : null
+	    );
+	} finally {
+	    fclose($stream);
+	}
 
     }
 
@@ -36,7 +51,7 @@ class Amfphp_Core_HttpRequestGatewayFactory {
      * @param Amfphp_Core_Config $config optional. If null, the gateway will use the default
      * @return Amfphp_Core_Gateway
      */
-    static public function createGateway(Amfphp_Core_Config $config = null){
+    static public function createGateway(?Amfphp_Core_Config $config = null, ?string $rawInputData = null){
         $contentType = null;
         if(isset ($_GET['contentType'])){
             $contentType = $_GET['contentType'];
@@ -44,7 +59,7 @@ class Amfphp_Core_HttpRequestGatewayFactory {
 
             $contentType = $_SERVER['CONTENT_TYPE'];
         }
-        $rawInputData = self::getRawPostData();
+        $rawInputData = $rawInputData ?? self::getRawPostData();
         return new Amfphp_Core_Gateway($_GET, $_POST, $rawInputData, $contentType, $config);
     }
 }

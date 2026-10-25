@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\NeighborController;
+use App\Http\Controllers\SuperCropCertificationController;
 use App\Http\Controllers\GameController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\DailyGiftController;
@@ -16,6 +17,9 @@ use App\Http\Controllers\HomeWorldController;
 use App\Http\Controllers\PlayerExportController;
 use App\Http\Controllers\AdminPlayerImportController;
 use Illuminate\Http\Request;
+use App\Support\MarketCompetition;
+use App\Support\MarketGameSettings;
+use App\Support\MarketSeason;
 
 // Flash checks this policy before a loaded SWF exposes scriptable data to the
 // main game movie. Allow only the host that served the policy, rather than a
@@ -35,6 +39,56 @@ Route::get('/crossdomain.xml', function (Request $request) {
     return response($policy, 200)
         ->header('Content-Type', 'text/x-cross-domain-policy')
         ->header('Cache-Control', 'public, max-age=3600');
+});
+
+$marketCms = function (string $week) {
+    abort_unless(MarketCompetition::enabledFeatures() !== [], 404);
+    abort_unless(preg_match('/^\d{4}-\d{2}-\d{2}$/', $week) === 1, 404);
+    $utc = new \DateTimeZone('UTC');
+    $requested = \DateTimeImmutable::createFromFormat('!Y-m-d', $week, $utc);
+    abort_unless($requested !== false && $requested->format('Y-m-d') === $week, 404);
+    $current = new \DateTimeImmutable(MarketSeason::cacheKey(), $utc);
+    abort_unless($requested->format('N') === '1'
+        && $requested >= $current->modify('-7 days')
+        && $requested <= $current->modify('+7 days'), 404);
+
+    // The CMS response is binary zlib data, which cannot be stored directly in
+    // the UTF-8 database cache. Cache its base64 representation instead.
+    $featureMask = (MarketCompetition::isEnabled(MarketCompetition::FARMERS) ? 'f1' : 'f0')
+        .(MarketCompetition::isEnabled(MarketCompetition::TROPICAL) ? 't1' : 't0');
+    $encodedCms = Cache::remember(
+        'market-cms-base64-v2-'.$week.'-'.$featureMask,
+        now()->addDays(2),
+        static fn (): string => base64_encode(MarketSeason::cms($requested))
+    );
+    $cms = base64_decode($encodedCms, true);
+    abort_if($cms === false, 500, 'The cached market CMS is invalid.');
+
+    return response($cms, 200)
+        ->header('Content-Type', 'application/octet-stream')
+        ->header('Cache-Control', 'public, max-age=86400');
+};
+
+// v2 changes the resource path so clients cannot reuse a cached CMS document
+// that still lists a market feature disabled by the current server config.
+Route::get('/farmville/market-cms-v2/{week}.xml.gz', $marketCms);
+Route::get('/farmville/market-cms/{week}.xml.gz', $marketCms);
+
+// A versioned game-settings URL keeps the revived board's crop definitions
+// identical in Flash and in the server-authoritative task catalog.
+Route::get('/farmville/market-game-settings-v1.xml.gz', function () {
+    abort_unless(MarketCompetition::isEnabled(MarketCompetition::FARMERS), 404);
+    $encoded = Cache::remember(
+        'market-game-settings-base64-v1',
+        now()->addDays(7),
+        static fn (): string => base64_encode(MarketGameSettings::compressedXml())
+    );
+    $settings = base64_decode($encoded, true);
+    abort_if($settings === false, 500, 'The cached market settings are invalid.');
+
+    return response($settings, 200)
+        ->header('Content-Type', 'application/octet-stream')
+        ->header('Cache-Control', 'public, max-age=86400');
 });
 
 // The v2 Buy Ingredients movie was referenced by the preserved game client but
@@ -157,6 +211,8 @@ Route::middleware(['auth', 'discord.member'])->group(function () {
     Route::post('/neighbors/accept', [NeighborController::class, 'acceptNeighbor'])->name('neighbors.accept');
     Route::post('/neighbors/reject', [NeighborController::class, 'rejectNeighbor'])->name('neighbors.reject');
     Route::post('/neighbors/send-request', [NeighborController::class, 'sendNeighborRequest'])->name('neighbors.send-request');
+    Route::get('/super-crops/requests', [SuperCropCertificationController::class, 'inbox'])->name('super-crops.requests');
+    Route::post('/super-crops/respond', [SuperCropCertificationController::class, 'respond'])->name('super-crops.respond');
 
     // Daily Gift routes
     Route::get('/daily-gift/status', [DailyGiftController::class, 'checkStatus'])->name('daily-gift.status');
@@ -175,10 +231,14 @@ Route::middleware(['auth', 'discord.member'])->group(function () {
     Route::post('/api/world-shop/travel', [WorldShopController::class, 'travel'])->name('world-shop.travel');
 
     // Chat routes
-    Route::get('/chat/messages', [ChatController::class, 'messages'])->name('chat.messages');
-    Route::post('/chat/send', [ChatController::class, 'send'])->name('chat.send');
-    Route::get('/chat/unread-count', [ChatController::class, 'unreadCount'])->name('chat.unread-count');
-    Route::post('/chat/mark-read', [ChatController::class, 'markRead'])->name('chat.mark-read');
+    Route::get('/chat/messages', [ChatController::class, 'messages'])
+        ->middleware('throttle:chat-history')->name('chat.messages');
+    Route::post('/chat/send', [ChatController::class, 'send'])
+        ->middleware('throttle:chat-send')->name('chat.send');
+    Route::get('/chat/unread-count', [ChatController::class, 'unreadCount'])
+        ->middleware('throttle:chat-unread')->name('chat.unread-count');
+    Route::post('/chat/mark-read', [ChatController::class, 'markRead'])
+        ->middleware('throttle:chat-mark-read')->name('chat.mark-read');
 });
 
 require __DIR__.'/auth.php';
